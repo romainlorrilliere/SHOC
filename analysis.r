@@ -86,6 +86,11 @@ habitat_specilisation<- function(dataBrut=FALSE,fileAnalysis="data/analysisHabia
 
     ddpoint$pr <- as.numeric(ddpoint$ab>0)
 
+    sp_pr <- aggregate(pr~sp,ddpoint,sum)
+    sp_pr <- subset(sp_pr, pr>200)
+
+    ddpoint <- subset(ddpoint,sp %in% sp_pr$sp)
+
     ddhab <- as.data.frame(table(ddpoint$hab))
     colnames(ddhab) <- c("hab","hab_nb")
 
@@ -97,7 +102,7 @@ habitat_specilisation<- function(dataBrut=FALSE,fileAnalysis="data/analysisHabia
 
     ddsp_hab <- merge(ddsp_hab,ddhab,by="hab")
     ddsp_hab <- merge(ddsp_hab,ddsp,by="sp")
-        ddsp_hab <- merge(ddsp_hab,thab,by="hab")
+    ddsp_hab <- merge(ddsp_hab,thab,by="hab")
 
 ddsp_hab$prevalence <- (ddsp_hab$ab/ddsp_hab$ab_tot)*(ddsp_hab$pr/ddsp_hab$hab_nb)
 
@@ -115,78 +120,167 @@ ddsp_hab$prevalence <- (ddsp_hab$ab/ddsp_hab$ab_tot)*(ddsp_hab$pr/ddsp_hab$hab_n
 gg
 
 ### resampling 300 by main habitat
-    dodo$grHab <- ifelse(dodo$habitat_name %in% c("farmland","forest","urban area"),dodo$habitat_name,"other")
+    dodo$grHab <- ifelse(dodo$habitat_name %in% c("farmland","forest","urban area"),as.character(dodo$habitat_name),"other")
 
-    ddSpe <- NULL
+        dddprev <- NULL
+        dddprev_prop <- NULL
 
-    for(i in 1:200){
+    for(i in 1:400){
 
-    dodo <- dodo[sample(1:nrow(dodo)),]
-    dodo.dt <- data.table(dodo)
-    dodo.dt <- dodo.dt[,order_gr := 1:.N, by=grHab]
-    dodo2 <- as.data.frame(dodo.dt)
+        dodo_<- dodo[sample(1:nrow(dodo)),]
+        dodo.dt <- data.table(dodo_)
+        dodo.dt <- dodo.dt[,order_gr := 1:.N, by=grHab]
+        dodo2 <- as.data.frame(dodo.dt)
 
-    dodo2 <- subset(dodo2,order_gr <= 300)
- # gghab <- ggplot(dodo2,aes(x=factor(1),fill=habitat_name))+ geom_bar(width = 1)+
- # coord_polar("y")
-
-  #  ggsave("output/habitatSHOC_resampled.png",gghab)
-
-
-    ddpoint2 <- subset(ddpoint,carrepoint %in% dodo2$carrepoint)
+        dodo2 <- subset(dodo2,order_gr <= 300)
+        ## gghab <- ggplot(dodo2,aes(x=factor(1),fill=habitat_name))+ geom_bar(width = 1)+
+        ## coord_polar("y")
+        ##  ggsave("output/habitatSHOC_resampled.png",gghab)
 
 
-    ddAgghab <- aggregate(ab~sp+hab,ddpoint2,sum)
-    ddAggtot <- aggregate(ab~sp,ddpoint2,sum)
+        ddpoint2 <- subset(ddpoint,carrepoint %in% dodo2$carrepoint)
+
+        ddsp <- aggregate(ab~sp,ddpoint2,sum)
+        colnames(ddsp) <- c("sp","ab_tot")
+
+        ddsp_hab <- aggregate(ab ~ hab+sp,ddpoint2,sum)
+        colnames(ddsp_hab) <- c("hab","sp","ab")
+
+        ddsp_hab <- merge(ddsp_hab,ddsp,by="sp")
+
+        ddsp_hab$prevalence <- (ddsp_hab$ab/ddsp_hab$ab_tot)
+        ddsp_hab <- merge(ddsp_hab,thab,by="hab")
+
+        dprevalence <- dcast(sp ~habitat_name,data=ddsp_hab,value.var="prevalence")
+        colnames(dprevalence)[c(4,7,8)] <- c("woodland","urban","water")
+        dprevalence[is.na(dprevalence)] <- 0
+
+        dprevalence <- subset(dprevalence,(dprevalence$farmland + dprevalence$woodland + dprevalence$urban)>0)
+        dprevalence$sum3hab <- (dprevalence$farmland + dprevalence$woodland + dprevalence$urban)
+     #   dprevalence <- subset(dprevalence,sum3hab>.75)
+        dprevalence$farmland_prop <- dprevalence$farmland / (dprevalence$farmland + dprevalence$woodland + dprevalence$urban)
+        dprevalence$woodland_prop <- dprevalence$woodland / (dprevalence$farmland + dprevalence$woodland + dprevalence$urban)
+        dprevalence$urban_prop <- dprevalence$urban / (dprevalence$farmland + dprevalence$woodland + dprevalence$urban)
+
+        dprev_prop <- dprevalence[,c("sp","farmland_prop","woodland_prop","urban_prop")]
+        colnames(dprev_prop) <- c("sp","farmland","woodland","urban")
+        dprev <- dprevalence[,1:(ncol(dprevalence)-4)]
+
+        ddprev <- melt(id.vars="sp",data=dprev)
+        colnames(ddprev)[2:3] <- c("habitat_name","preval")
+        ddprev$preval <- ddprev$preval - 0.3
+        ddprev$idset <- i
+        ddprev_prop <- melt(id.vars="sp",data=dprev_prop)
+        colnames(ddprev_prop)[2:3] <- c("habitat_name","preval_prop")
+        ddprev_prop$idset <- i
 
 
-    ddAgghab <- merge(ddAgghab,ddAggtot,by="sp")
-    colnames(ddAgghab)[3:4] <- c("sum","tot")
 
 
-        ddAgghab$prop <- ddAgghab$sum/ddAgghab$tot
+        dddprev <- rbind(dddprev,ddprev)
+        dddprev_prop<- rbind(dddprev_prop,ddprev_prop)
+    }
 
-    ddAgghab$set <- i
+    ddSpe.nb <- aggregate(preval~sp+habitat_name,dddprev,length)
 
-    ddSpe <- rbind(ddSpe,ddAgghab)
-
-}
-
-    ddSpe <- subset(ddSpe,sum>10)
-    ddSpe.agg <- aggregate(prop~sp+hab,ddSpe,quantile,c(0.025,0.5,0.975))
+    ddSpe.agg <- aggregate(preval~sp+habitat_name,dddprev,quantile,c(0.025,0.5,0.975))
 
     ddSpe.agg <- data.frame(ddSpe.agg[,1:2],ddSpe.agg[,3])
     colnames(ddSpe.agg)[3:5] <- c("ICinf","med","ICsup")
 
+    ddSpe.agg.mean <- aggregate(preval~sp+habitat_name,dddprev,mean)
+    colnames(ddSpe.agg.mean)[3] <- c("mean")
 
-    ddSpe.agg <- merge(ddSpe.agg,thab,by="hab")
+    ddSpe.agg <- merge(ddSpe.agg,ddSpe.agg.mean,by = c("sp","habitat_name"))
 
-    tsp <- read.csv("data/espece.csv",encoding="UTF-8")
-    tsp <- subset(tsp,select=c("pk_species","euring","french_name","english_name"))
-    colnames(tsp)[1] <- "sp"
+    ddSpe_prop.agg <- aggregate(preval_prop~sp+habitat_name,dddprev_prop,quantile,c(0.025,0.5,0.975))
 
-    ddSpe.agg <- merge(ddSpe.agg,tsp,by="sp")
+    ddSpe_prop.agg <- data.frame(ddSpe_prop.agg[,1:2],ddSpe_prop.agg[,3])
+    colnames(ddSpe_prop.agg)[3:5] <- c("ICinf","med","ICsup")
 
-    dres <- ddSpe.agg[order(ddSpe.agg$hab,ddSpe.agg$sp),]
-    dres.main <- subset(dres,hab %in% c("A","E","D")& med > .3)
-    dres.main <- dres.main[order(dres.main$sp,dres.main$med),]
+    ddSpe_prop.agg.mean <- aggregate(preval~sp+habitat_name,dddprev,mean)
+    colnames(ddSpe_prop.agg.mean)[3] <- c("mean")
 
-    tsp.bl <- read.csv("data/species.csv",sep=";")
+    ddSpe_prop.agg <- merge(ddSpe_prop.agg,ddSpe_prop.agg.mean,by = c("sp","habitat_name"))
 
-    dres.bl <- subset(dres,sp %in% tsp.bl$id_species & hab %in% c("A","E","D"))
-    vecCol <- c("farmland"="#ffb319","forest"="#1a9129","urban area"="#9439c4")
 
-    orderSp <- subset(tsp,sp %in% tsp.bl$id_species)
+ddSpe.agg <- merge(ddSpe.agg,tsp,by.x="sp",by.y="pk_species")
+ddSpe_prop.agg <- merge(ddSpe_prop.agg,tsp,by.x="sp",by.y="pk_species")
+
+
+
+     dres.bl <- subset(ddSpe.agg,birdlab & habitat_name%in% c("farmland","woodland","urban"))
+    vecCol <- c("farmland"="#ffb319","woodland"="#1a9129","urban"="#9439c4")
+
+
+     ttsp <- read.csv("data/espece.csv",encoding="UTF-8")
+    ttsp <- subset(ttsp,select=c("pk_species","euring","french_name","english_name"))
+    colnames(ttsp)[1] <- "sp"
+
+
+    orderSp <- subset(ttsp,sp %in% dres.bl$sp)
     dres.bl$english_name <- factor(dres.bl$english_name, levels = orderSp$english_name)
 
-    gg <- ggplot(dres.bl,aes(x=english_name,y=med,group=habitat_name,fill=habitat_name,colour=habitat_name))
-    gg <- gg + geom_hline(yintercept=.25,colour="white",size=2)
+
+
+    gg <- ggplot(dres.bl,aes(x=english_name,y=mean,group=habitat_name,fill=habitat_name,colour=habitat_name))
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2)
     gg <- gg + geom_bar(stat="identity", position="dodge",width=.7,alpha=.5)
-    gg <- gg + geom_hline(yintercept=.25,colour="white",size=2,alpha=.5)
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2,alpha=.5)
     gg <- gg + geom_errorbar(aes(ymin=ICinf,ymax=ICsup),position = position_dodge(),width=.7 )
+    gg <- gg + geom_errorbar(aes(ymin=med,ymax=med),position = position_dodge(),width=.7 )
     gg <- gg + theme(axis.text.x = element_text(angle = 45, hjust = 1))+ labs(x="",y="Habitat prevalence",fill="Habitat",colour="Habitat")
     gg <- gg + scale_fill_manual(values=vecCol)+scale_colour_manual(values=vecCol)
-    ggsave("output/prevalence_habitat.png",gg)
+    gg
+
+
+
+    ggsave("output/prevalence_habitat___8.png",gg)
+
+
+
+    gg <- ggplot(subset(dres.bl,mean>0),aes(x=english_name,y=mean,group=habitat_name,fill=habitat_name,colour=habitat_name))
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2)
+    gg <- gg + geom_bar(stat="identity", position="dodge",width=.7,alpha=.5)
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2,alpha=.5)
+    gg <- gg + theme(axis.text.x = element_text(angle = 45, hjust = 1))+ labs(x="",y="Habitat prevalence",fill="Habitat",colour="Habitat")
+    gg <- gg + scale_fill_manual(values=vecCol)+scale_colour_manual(values=vecCol)
+    gg
+
+
+
+    ggsave("output/prevalence_habitat___8exp.png",gg)
+
+
+    ddSpe.agg <- ddSpe.agg[,1:8]
+
+    write.csv(ddSpe.agg,"output/shoc_prevalence.csv",row.names=FALSE)
+
+    ddSpe.agg2 <- subset(ddSpe.agg,habitat_name %in% c("farmland","woodland","urban"))
+    dprev_wide <- dcast(ddSpe.agg2,sp~habitat_name,value.var="mean")
+    colnames(dprev_wide) <- c("pk_species","shoc_farmland_prev_index","shoc_woodland_prev_index","shoc_urban_prev_index")
+
+    tindic <- read.csv2("../Birdlab/generic_data/espece_list_indicateur.csv",encoding="UTF-8")
+    tindic <- tindic[,c(1:15,19:21)]
+    tindic$habitat_specialisation_f <- gsub("Ã¢","â",tindic$habitat_specialisation_f)
+    colnames(tindic)[16:18] <- c("shoc_farmland_prev","shoc_woodland_prev","shoc_urban_prev")
+    dim(tindic)
+    tindic <- merge(tindic,dprev_wide,by="pk_species",all.x=TRUE)
+    dim(tindic)
+    tindic$shoc_farmland_prev <- ifelse(is.na(tindic$shoc_farmland_prev_index),FALSE,tindic$shoc_farmland_prev_index > 0)
+    tindic$shoc_woodland_prev <- ifelse(is.na(tindic$shoc_woodland_prev_index),FALSE,tindic$shoc_woodland_prev_index > 0)
+    tindic$shoc_urban_prev <- ifelse(is.na(tindic$shoc_urban_prev_index),FALSE,tindic$shoc_urban_prev_index > 0)
+
+    tindic <- tindic[,1:18]
+
+    write.csv(tindic,"../Birdlab/generic_data/espece_list_indicateur.csv",na="",row.names=FALSE)
+
+    tindex <- read.csv("../Birdlab/generic_data/espece_indicateur_fonctionel.csv",encoding="UTF-8")
+
+    tindex <- merge(tindex,dprev_wide,by="pk_species",all=TRUE)
+
+    write.csv(tindex,"../Birdlab/generic_data/espece_indicateur_fonctionel.csv",na="",row.names=FALSE)
+
 
 }
 
