@@ -275,7 +275,7 @@ ddSpe_prop.agg <- merge(ddSpe_prop.agg,tsp,by.x="sp",by.y="pk_species")
 
     write.csv(tindic,"../Birdlab/generic_data/espece_list_indicateur.csv",na="",row.names=FALSE,fileEncoding="UTF-8")
 
-    tindex <- read.csv("../Birdlab/generic_data/espece_indicateur_fonctionel.csv",encoding="UTF-8")
+    tindex <- read.csv("../Birdlab/generic_data/espece_list_indicateur - Copie (4).csv",encoding="UTF-8")
 
     tindex <- merge(tindex,dprev_wide,by="pk_species",all=TRUE)
 
