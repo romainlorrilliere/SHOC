@@ -22,7 +22,7 @@ habitat_prevalence_winter <- function(dataBrut=FALSE,fileAnalysis="data/winter_a
     require(ggplot2)
     require(data.table)
 
-    ##dataBrut=FALSE ;    fileAnalysis="data/winter_analysisHabiat.csv"
+    ## dataBrut=FALSE ;    fileAnalysis="data/winter_analysisHabiat.csv"
     if(dataBrut) {
         d <- read.delim("data/export_shoc_04072018_155413.txt",stringsAsFactors=FALSE,header=TRUE,encoding="UTF-8")
 
@@ -234,7 +234,11 @@ habitat_prevalence_winter <- function(dataBrut=FALSE,fileAnalysis="data/winter_a
 
 
 
+
+    ddSpe.agg <- read.csv("output/winter_prevalence_CI.csv")
+
     dprev_wide <- dcast(ddSpe.agg,sp~habitat_name,value.var="mean")
+    dprev_wide <- dprev_wide[,c("sp","farmland","woodland","urban")]
     colnames(dprev_wide) <- c("pk_species","shoc_farmland_prev_index","shoc_woodland_prev_index","shoc_urban_prev_index")
 
     tindic <- read.csv("../Birdlab/generic_data/espece_list_indicateur.csv",encoding="UTF-8")
