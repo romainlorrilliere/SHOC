@@ -22,35 +22,35 @@ habitat_prevalence_winter <- function(dataBrut=FALSE,fileAnalysis="data/winter_a
     require(ggplot2)
     require(data.table)
 
-    ## dataBrut=FALSE ;    fileAnalysis="data/winter_analysisHabiat.csv"
+    dataBrut=FALSE ;    fileAnalysis="data/winter_analysisHabiat.csv"
     if(dataBrut) {
         d <- read.delim("data/export_shoc_04072018_155413.txt",stringsAsFactors=FALSE,header=TRUE,encoding="UTF-8")
+        colnames(d) <- c("Code.inventaire","Etude","Site","Pays","Departement","INSEE","Commune","N..Carre.EPS","Date","Heure","Heure.fin","N..Passage","Observateur","Email","EXPORT_STOC_TEXT_EPS_POINT","Altitude","Classe","Espece","Nombre","Distance.de.contact","Longitude","Latitude","Type.de.coordonnées","Type.de.coordonnées.lambert","EPS.Nuage","EPS.Pluie","EPS.Vent","EPS.Visibilite","EPS.Neige","EPS.Transport","EPS.P.Milieu","EPS.P.Type","EPS.P.Cat1","EPS.P.Cat2","EPS.P.Sous.Cat1","EPS.P.Sous.Cat2","EPS.S.Milieu","EPS.S.Type","EPS.S.Cat1","EPS.S.Cat2","EPS.S.Sous.Cat1","EPS.S.Sous.Cat2")
+        dd <- subset(d,d$Distance.de.contact %in% c("LESS25","LESS100","LESS200","U")& N..Passage >0 & substr(Date,4,5)=="12",select=c("Code.inventaire","N..Carre.EPS","Date","N..Passage","EXPORT_STOC_TEXT_EPS_POINT","Espece","Nombre","EPS.P.Milieu","EPS.P.Type"))
 
-        dd <- subset(d,d$Distance.de.contact %in% c("LESS25","LESS100","LESS200","U")& N..Passage >0 & substr(Date,4,5)=="12",select=c("Code.inventaire","N..Carré.EPS","Date","N..Passage","EXPORT_STOC_TEXT_EPS_POINT","Espèce","Nombre","EPS.P.Milieu"))
+        dd$Espece[dd$Espece==""] <- "OTHERS"
+        dd$Espece <- substr(dd$Espece,1,6)
 
-        dd$Espèce[dd$Espèce==""] <- "OTHERS"
-        dd$Espèce <- substr(dd$Espèce,1,6)
-
-        ddinv <- aggregate(Nombre~Code.inventaire+N..Carré.EPS+Date+N..Passage+EXPORT_STOC_TEXT_EPS_POINT+Espèce+EPS.P.Milieu,dd,sum)
+        ddinv <- aggregate(Nombre~Code.inventaire+N..Carre.EPS+Date+N..Passage+EXPORT_STOC_TEXT_EPS_POINT+Espece+EPS.P.Milieu,,dd,sum)
 
         ddinv$an <- as.numeric(substr(ddinv$Date,7,10))
 
 
-        ddan <- aggregate(Nombre~N..Carré.EPS+EXPORT_STOC_TEXT_EPS_POINT+Espèce+an,ddinv,max)
+        ddan <- aggregate(Nombre~N..Carre.EPS+EXPORT_STOC_TEXT_EPS_POINT+Espece+an,ddinv,max)
 
-        ddan_w <- dcast(ddan,N..Carré.EPS+EXPORT_STOC_TEXT_EPS_POINT+an ~Espèce,value.var="Nombre")
+        ddan_w <- dcast(ddan,N..Carre.EPS+EXPORT_STOC_TEXT_EPS_POINT+an ~Espece,value.var="Nombre")
         ddan_w[is.na(ddan_w)] <- 0
 
-        ddan2 <- melt(ddan_w,id.vars=c("N..Carré.EPS","EXPORT_STOC_TEXT_EPS_POINT","an"))
+        ddan2 <- melt(ddan_w,id.vars=c("N..Carre.EPS","EXPORT_STOC_TEXT_EPS_POINT","an"))
         colnames(ddan2) <- c("carre","point","an","sp","ab")
 
-        ddcarre <- aggregate(Nombre~N..Carré.EPS+an+Espèce,ddinv,max)
+        ddcarre <- aggregate(Nombre~N..Carre.EPS+an+Espece,ddinv,max)
         colnames(ddcarre)<- c("carre","an","sp","ab_carre")
 
         ddpoint <- merge(ddan2,ddcarre,by=c("carre","an","sp"))
         ddpoint$carrepoint <- paste(ddpoint$carre,ddpoint$point)
 
-        ddhab <- unique(dd[,c("N..Carré.EPS","EXPORT_STOC_TEXT_EPS_POINT","EPS.P.Milieu")])
+        ddhab <- unique(dd[,c("N..Carre.EPS","EXPORT_STOC_TEXT_EPS_POINT","EPS.P.Milieu")])
         colnames(ddhab) <- c("carre","point","hab")
         ddhab$carrepoint <- paste(ddhab$carre,ddhab$point)
 
@@ -1216,3 +1216,204 @@ habitat_specilisation_3 <- function(dataBrut=FALSE,fileAnalysis="data/analysisHa
 }
 
 
+
+habitat_Indval_winter <- function(fileAnalysis="data/winter_analysisHabiat.csv") {
+    require(reshape2)
+    require(ggplot2)
+    require(data.table)
+    require(dplyr)
+
+    fileAnalysis="data/winter_analysisHabiat.csv"
+
+
+    dpoint <- read.csv(fileAnalysis)
+
+
+    thab <- read.csv("data/habitat.csv")
+
+    dpoint <- inner_join(dpoint,thab)
+
+
+    ## Prevalence indicator
+    ##    Andrade, C., Chiron, F., Julliard, R., 2012. Improving the selection of focal species exposed to pesticides to support ecological risk assessments. Ecotoxicology 21, 2430–2440. https://doi.org/10.1007/s10646-012-0982-4
+
+   dpoint$pr <- as.numeric(dpoint$ab>0)
+
+    ddpoint <- subset(dpoint,an == 2014)
+
+    ddhab <- as.data.frame(table(ddpoint$habitat_name))
+    colnames(ddhab) <- c("hab","hab_nb")
+
+    ddsp <- aggregate(ab~sp,ddpoint,sum)
+    colnames(ddsp) <- c("sp","ab_tot")
+
+    ddsp_hab <- aggregate(cbind(ddpoint$ab,ddpoint$pr)~hab+sp,ddpoint,sum)
+    colnames(ddsp_hab) <- c("hab","sp","ab","pr")
+
+    ddsp_hab <- merge(ddsp_hab,ddhab,by="hab")
+    ddsp_hab <- merge(ddsp_hab,ddsp,by="sp")
+    ddsp_hab <- merge(ddsp_hab,thab,by="hab")
+
+    ddsp_hab$prevalence <- (ddsp_hab$ab/ddsp_hab$ab_tot)*(ddsp_hab$pr/ddsp_hab$hab_nb)
+
+
+    dprevalence <- dcast(sp ~habitat_name,data=ddsp_hab,value.var="prevalence")
+    colnames(dprevalence)[c(4,7,8)] <- c("woodland","urban","water")
+
+    tsp <- read.csv2("data/espece_list_indicateur.csv",encoding="UTF-8")
+    tsp <- tsp[,c("pk_species","french_name","english_name","birdlab","birdlab_shoc_prevalence_farmland","birdlab_shoc_prevalence_woodland","birdlab_shoc_prevalence_urban")]
+
+    dprevalence <- merge(dprevalence,tsp,by.x="sp",by.y="pk_species")
+
+    ## require(ggtern)
+    ## gg <- ggtern(subset(dprevalence,birdlab),aes(farmland,woodland,urban,label=sp,color=birdlab_shoc_prevalence_farmland))+geom_text(size=2)
+    ## gg
+
+### resampling 300 by main habitat
+    dodo$grHab <- ifelse(dodo$habitat_name %in% c("farmland","forest","urban area"),as.character(dodo$habitat_name),"other")
+
+        dddprev <- NULL
+
+    for(i in 1:400){
+
+        dodo_<- dodo[sample(1:nrow(dodo)),]
+        dodo.dt <- data.table(dodo_)
+        dodo.dt <- dodo.dt[,order_gr := 1:.N, by=grHab]
+        dodo2 <- as.data.frame(dodo.dt)
+
+        dodo2 <- subset(dodo2,order_gr <= 300)
+        ## gghab <- ggplot(dodo2,aes(x=factor(1),fill=habitat_name))+ geom_bar(width = 1)+
+        ## coord_polar("y")
+        ##  ggsave("output/habitatSHOC_resampled.png",gghab)
+
+
+        ddpoint2 <- subset(ddpoint,carrepoint %in% dodo2$carrepoint)
+
+        ddsp <- aggregate(ab~sp,ddpoint2,sum)
+        colnames(ddsp) <- c("sp","ab_tot")
+
+        ddsp_hab <- aggregate(ab ~ hab+sp,ddpoint2,sum)
+        colnames(ddsp_hab) <- c("hab","sp","ab")
+
+        ddsp_hab <- merge(ddsp_hab,ddsp,by="sp")
+
+        ddsp_hab$prevalence <- (ddsp_hab$ab/ddsp_hab$ab_tot)
+        ddsp_hab <- merge(ddsp_hab,thab,by="hab")
+
+        dprevalence <- dcast(sp ~habitat_name,data=ddsp_hab,value.var="prevalence")
+        colnames(dprevalence)[c(4,7,8)] <- c("woodland","urban","water")
+        dprevalence[is.na(dprevalence)] <- 0
+
+        dprevalence <- subset(dprevalence,(dprevalence$farmland + dprevalence$woodland + dprevalence$urban)>0)
+        dprevalence$sum3hab <- (dprevalence$farmland + dprevalence$woodland + dprevalence$urban)
+     #   dprevalence <- subset(dprevalence,sum3hab>.75)
+        dprev <- dprevalence[,c("sp","farmland","woodland","urban")]
+
+        ddprev <- melt(id.vars="sp",data=dprev)
+        colnames(ddprev)[2:3] <- c("habitat_name","preval")
+        ddprev$preval <- ddprev$preval - 0.3
+        ddprev$idset <- i
+
+        dddprev <- rbind(dddprev,ddprev)
+    }
+
+
+
+    write.csv(dddprev,"output/winter_habitat_prev_bootstrap.csv",row.names=FALSE)
+
+
+    ddSpe.nb <- aggregate(preval~sp+habitat_name,dddprev,length)
+
+    ddSpe.agg <- aggregate(preval~sp+habitat_name,dddprev,quantile,c(0.025,0.5,0.975))
+
+    ddSpe.agg <- data.frame(ddSpe.agg[,1:2],ddSpe.agg[,3])
+    colnames(ddSpe.agg)[3:5] <- c("ICinf","med","ICsup")
+
+    ddSpe.agg.mean <- aggregate(preval~sp+habitat_name,dddprev,mean)
+    colnames(ddSpe.agg.mean)[3] <- c("mean")
+
+    ddSpe.agg <- merge(ddSpe.agg,ddSpe.agg.mean,by = c("sp","habitat_name"))
+
+
+    ddSpe.agg <- merge(ddSpe.agg,tsp,by.x="sp",by.y="pk_species")
+
+
+    ddSpe.agg <- subset(ddSpe.agg,habitat_name%in% c("farmland","woodland","urban"))
+
+    write.csv(ddSpe.agg,"output/winter_prevalence_CI.csv",row.names=FALSE)
+
+
+
+    dres.bl <- subset(ddSpe.agg,birdlab)
+
+
+
+    vecCol <- c("farmland"="#ffb319","woodland"="#1a9129","urban"="#ff0404")
+
+
+    ttsp <- read.csv("data/espece.csv",encoding="UTF-8")
+    ttsp <- subset(ttsp,select=c("pk_species","euring","french_name","english_name"))
+    colnames(ttsp)[1] <- "sp"
+
+
+    orderSp <- subset(ttsp,sp %in% dres.bl$sp)
+    dres.bl$english_name <- factor(dres.bl$english_name, levels = orderSp$english_name)
+
+
+
+    gg <- ggplot(dres.bl,aes(x=english_name,y=mean,group=habitat_name,fill=habitat_name,colour=habitat_name))
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2)
+    gg <- gg + geom_bar(stat="identity", position="dodge",width=.7,alpha=.5)
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2,alpha=.5)
+    gg <- gg + geom_errorbar(aes(ymin=ICinf,ymax=ICsup),position = position_dodge(),width=.7 )
+    gg <- gg + geom_errorbar(aes(ymin=med,ymax=med),position = position_dodge(),width=.7 )
+    gg <- gg + theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust=.5))+ labs(x="",y="Habitat prevalence",fill="Habitat",colour="Habitat")
+    gg <- gg + scale_fill_manual(values=vecCol)+scale_colour_manual(values=vecCol)
+    ## gg
+   ggsave("output/winter_birdlab_prevalence_habitat.png",gg,width=8,height=6)
+
+
+
+    gg <- ggplot(subset(dres.bl,mean>0),aes(x=english_name,y=mean,group=habitat_name,fill=habitat_name,colour=habitat_name))
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2)
+    gg <- gg + geom_bar(stat="identity", position="dodge",width=.7,alpha=.5)
+    gg <- gg + geom_hline(yintercept=0,colour="white",size=2,alpha=.5)
+    gg <- gg + theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust=.5))+ labs(x="",y="Habitat prevalence",fill="Habitat",colour="Habitat")
+    gg <- gg + scale_fill_manual(values=vecCol)+scale_colour_manual(values=vecCol)
+    ## gg
+    ggsave("output/winter_birdlab_prevalence_habitat_index.png",gg,width=8,height=6)
+
+
+
+
+    ddSpe.agg <- read.csv("output/winter_prevalence_CI.csv")
+
+    dprev_wide <- dcast(ddSpe.agg,sp~habitat_name,value.var="mean")
+    dprev_wide <- dprev_wide[,c("sp","farmland","woodland","urban")]
+    colnames(dprev_wide) <- c("pk_species","shoc_farmland_prev_index","shoc_woodland_prev_index","shoc_urban_prev_index")
+
+    tindic <- read.csv("../Birdlab/generic_data/espece_list_indicateur.csv",encoding="UTF-8")
+    dim(tindic)
+    tindic <- merge(tindic,dprev_wide,by="pk_species",all.x=TRUE)
+    dim(tindic)
+    tindic$shoc_farmland_prev <- ifelse(is.na(tindic$shoc_farmland_prev_index),FALSE,tindic$shoc_farmland_prev_index > 0)
+    tindic$shoc_woodland_prev <- ifelse(is.na(tindic$shoc_woodland_prev_index),FALSE,tindic$shoc_woodland_prev_index > 0)
+    tindic$shoc_urban_prev <- ifelse(is.na(tindic$shoc_urban_prev_index),FALSE,tindic$shoc_urban_prev_index > 0)
+
+    tindic <- tindic[,sort(setdiff(1:ncol(tindic),grep("index",colnames(tindic))))]
+
+    write.csv(tindic,"../Birdlab/generic_data/espece_list_indicateur.csv",na="",row.names=FALSE,fileEncoding="UTF-8")
+
+    tindex <- read.csv("../Birdlab/generic_data/espece_indicateur_fonctionel.csv",encoding="UTF-8")
+    tindex <-  tindex[,sort(setdiff(1:ncol(tindex),intersect(grep("index",colnames(tindex)),grep("shoc",colnames(tindex)))))]
+
+    tindex <- merge(tindex,dprev_wide,by="pk_species",all=TRUE)
+
+    colindex <- c("pk_species","ssi","sti","sti_europe","thermal_niche_mean","thermal_niche_range","thermal_niche_max","thermal_niche_min","stri","exp_stri","trophic_vegetation","trophic_invertebrate","trophic_vertebrate","shoc_farmland_prev_index","shoc_woodland_prev_index","shoc_urban_prev_index")
+    colindex <- c(colindex,setdiff(colnames(tindex),colindex))
+    tindex <- tindex[,colindex]
+
+    write.csv(tindex,"../Birdlab/generic_data/espece_indicateur_fonctionel.csv",na="",row.names=FALSE,fileEncoding="UTF-8")
+
+
+}
